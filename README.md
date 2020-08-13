@@ -9,9 +9,5 @@
 | Based on: | [PyEto](https://github.com/woodcrafty/PyETo)|
 | | |
 ---
-#### How to Generate Package Dist: 
-Open the terminal, go to the project directory and run the command bellow.
-```
-python setup.py sdist
-```
+
 

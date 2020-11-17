@@ -24,9 +24,6 @@ All calculations and formulas were reviewed by the agrometeorologist Mariana Gon
 In case of questions related to the python code, bug fix ...
 please contact Bruno Ducraux, who is the python developer responsible for the project.
 
-
-https://seer.sct.embrapa.br/index.php/agrometeoros/article/view/26527
-
 Installation
 ------------
 `pip install agro-met-equations-dynalogic`

@@ -330,7 +330,7 @@ def fao56_penman_monteith(net_radiation, temperature_mean, ws, latent_ht, sat_vp
     a3 = (time_period_conversion / (temperature_mean + 273)) * psy * ws * (sat_vp - avp)
     a4 = delta_sat_vp + (psy * (1 + 0.34 * ws))
 
-    return a1 * ((a2 + a3) / a4)
+    return (a1 * a2 + a3) / a4
 
 
 def hargreaves(temperature_min, temperature_max, temperature_mean, et_radiation):

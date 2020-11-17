@@ -1,4 +1,5 @@
 import unittest
+
 from AgroMetEquations import (sol_dec,
                               sunset_hour_angle,
                               daylight_hours,

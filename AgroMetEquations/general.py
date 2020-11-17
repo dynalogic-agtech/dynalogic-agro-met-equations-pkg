@@ -83,9 +83,8 @@ def days_passed_on_current_year():
     Calculate the days passed until today date
     :return: int
     """
-    initial_date = date(date.today().year, 1, 1)
     today = date.today()
-    return abs((today - initial_date).days)+1
+    return today.timetuple().tm_yday
 
 
 def sunrise_sunset_hour(_sunset_hour_angle):

@@ -19,7 +19,7 @@ All calculations and formulas were reviewed by the agrometeorologist Mariana Gon
 
 [Conversion factors and general equations applied in agricultural and forest meteorology](https://seer.sct.embrapa.br/index.php/agrometeoros/article/view/26527)
 
-[Evapotranspiration_Equation.pdf](docs/Evapotranspiration_Equation.pdf)
+[Evapotranspiration_Equation.pdf](AgroMetEquations/docs/Evapotranspiration_Equation.pdf)
 
 In case of questions related to the python code, bug fix ...
 please contact Bruno Ducraux, who is the python developer responsible for the project.

@@ -4,12 +4,15 @@ Internal validation functions.
 :copyright: (c) 2015 by Mark Richards.
 :license: BSD 3-Clause, see LICENSE.txt for more details.
 """
-from AgroMetEquations.convert import deg2rad
 
 # Internal constants
 # Latitude
 _MINLAT = -90.0
 _MAXLAT = 90.0
+
+# Longitude
+_MINLON = -180.0
+_MAXLON = 180.0
 
 # Solar declination
 _MINSOLDEC = -23.5
@@ -39,10 +42,13 @@ def check_doy(doy):
 
 
 def check_latitude_rad(latitude):
-     if not _MINLAT <= latitude <= _MAXLAT:
-        raise ValueError(
-            'latitude outside valid range {0!r} to {1!r} rad: {2!r}'
-            .format(_MINLAT, _MAXLAT, latitude))
+    if not _MINLAT <= latitude <= _MAXLAT:
+        raise ValueError('latitude outside valid range {0!r} to {1!r} rad: {2!r}'.format(_MINLAT, _MAXLAT, latitude))
+
+
+def check_longitude(longitude):
+    if not _MINLON <= longitude <= _MAXLON:
+        raise ValueError('longitude outside valid range {0!r} to {1!r} rad: {2!r}'.format(_MINLAT, _MAXLAT, longitude))
 
 
 def check_sol_dec_rad(sd):
@@ -53,8 +59,7 @@ def check_sol_dec_rad(sd):
     """
     if not _MINSOLDEC <= sd <= _MAXSOLDEC:
         raise ValueError(
-            'solar declination outside valid range {0!r} to {1!r} rad: {2!r}'
-            .format(_MINSOLDEC, _MAXSOLDEC, sd))
+            'solar declination outside valid range {0!r} to {1!r} rad: {2!r}'.format(_MINSOLDEC, _MAXSOLDEC, sd))
 
 
 def check_sunset_hour_angle_rad(sha):
@@ -65,5 +70,4 @@ def check_sunset_hour_angle_rad(sha):
     """
     if not _MINSHA <= sha <= _MAXSHA:
         raise ValueError(
-            'sunset hour angle outside valid range {0!r} to {1!r} rad: {2!r}'
-            .format(_MINSHA, _MAXSHA, sha))
+            'sunset hour angle outside valid range {0!r} to {1!r} rad: {2!r}'.format(_MINSHA, _MAXSHA, sha))

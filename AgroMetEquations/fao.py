@@ -9,17 +9,24 @@ meteorological data.
 """
 
 import math
+from datetime import time
 
 from ._check import (
     check_day_hours as _check_day_hours,
     check_doy as _check_doy,
     check_latitude_rad as _check_latitude_rad,
+    check_longitude as _check_longitude,
     check_sol_dec_rad as _check_sol_dec_rad,
     check_sunset_hour_angle_rad as _check_sunset_hour_angle_rad,
 )
 
+from .convert import deg2rad
+
 #: Solar constant [ MJ m-2 min-1]
 SOLAR_CONSTANT = 0.0820
+
+# Logitude of the center of local timezone
+REFERENTIAL_LONGITUDE = 45
 
 # Stefan Boltzmann constant [MJ K-4 m-2 day-1]
 STEFAN_BOLTZMANN_CONSTANT = 0.000000004903
@@ -280,6 +287,70 @@ def et_rad(latitude, solar_dec, sha, ird):
     tmp2 = sha * math.sin(latitude) * math.sin(solar_dec)
     tmp3 = math.cos(latitude) * math.cos(solar_dec) * math.sin(sha)
     return tmp1 * SOLAR_CONSTANT * ird * (tmp2 + tmp3)
+
+
+def et_rad_15min(latitude, longitude, solar_dec, ird, day_of_year, register_hour):
+    """
+    Estimate daily extraterrestrial radiation (*Ra*, 'top of the atmosphere
+    radiation').
+
+    Based on equation 21 in Allen et al (1998). If monthly mean radiation is
+    required make sure *sol_dec*. *sha* and *irl* have been calculated using
+    the day of the year that corresponds to the middle of the month.
+
+    **Note**: From Allen et al (1998): "For the winter months in latitudes
+    greater than 55 degrees (N or S), the equations have limited validity.
+    Reference should be made to the Smithsonian Tables to assess possible
+    deviations."
+
+    :param latitude: Latitude [degree]
+    :param longitude: longitude [degree]
+    :param solar_dec: Solar declination [radians]. Can be calculated using
+        ``sol_dec()``.
+    :param ird: Inverse relative distance earth-sun [dimensionless]. Can be
+        calculated using ``inv_rel_dist_earth_sun()``.
+    :param day_of_year: day of year of the register
+    :param register_hour: time object
+    :return: Daily extraterrestrial radiation [MJ m-2 day-1]
+    :rtype: float
+    """
+    _check_latitude_rad(latitude)
+    _check_longitude(longitude)
+    _check_sol_dec_rad(solar_dec)
+
+    latitude = deg2rad(latitude)
+
+    # b
+    b = (2*math.pi * (day_of_year - 81)) / 364
+
+    # Seasonal Solar Time
+    sc = 0.1645 * math.sin(2*b) - 0.1255 * math.cos(b) - 0.025 * math.sin(b)
+
+    # calculate t
+    if not isinstance(register_hour, time):
+        raise ValueError('Register hour is not a datetime object')
+
+    t = register_hour.hour + (register_hour.minute/60)
+
+    # Solar Time Angle
+    w = math.pi/12 * ((t + 0.06667 * (REFERENTIAL_LONGITUDE - longitude) + sc) - 12)
+
+    # w1
+    w1 = w - ((math.pi * 0.25) / 24)
+
+    # w2
+    w2 = w + ((math.pi * 0.25) / 24)
+
+    tmp1 = ((12.0 * 60.0) / math.pi) * SOLAR_CONSTANT * ird
+    tmp2 = (w2 - w1) * math.sin(latitude) * math.sin(solar_dec)
+    tmp3 = math.cos(latitude) * math.cos(solar_dec) * (math.sin(w2) - math.sin(w1))
+
+    et_rad_value = tmp1 * (tmp2 + tmp3)
+
+    if et_rad_value < 0:
+        return 0
+
+    return et_rad_value
 
 
 def fao56_penman_monteith(net_radiation, temperature_mean, ws, latent_ht, sat_vp, avp,

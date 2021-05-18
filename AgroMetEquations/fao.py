@@ -354,7 +354,7 @@ def et_rad_15min(latitude, longitude, solar_dec, ird, day_of_year, register_hour
 
 
 def fao56_penman_monteith(net_radiation, temperature_mean, ws, latent_ht, sat_vp, avp,
-                          delta_sat_vp, psy, shf=0.0, time_period="15min"):
+                          delta_sat_vp, psy, sol_rad, shf=0.0, time_period="15min"):
     """
     Estimate reference evapotranspiration (ETo) from a hypothetical
     short grass reference surface using the FAO-56 Penman-Monteith equation.
@@ -375,6 +375,7 @@ def fao56_penman_monteith(net_radiation, temperature_mean, ws, latent_ht, sat_vp
         Can be estimated using ``delta_svp()``.
     :param psy: Psychrometric constant [kPa deg C]. Can be estimated using
         ``psy_const_of_psychrometer()`` or ``psy_const()``.
+    :param sol_rad: Solar Radiation to calculate the day and night period
     :param shf: Soil heat flux (G) [MJ m-2 day-1] (default is 0.0, which is
         reasonable for a daily or 10-day time steps). For monthly time steps
         *shf* can be estimated using ``monthly_soil_heat_flux()`` or
@@ -396,10 +397,12 @@ def fao56_penman_monteith(net_radiation, temperature_mean, ws, latent_ht, sat_vp
     else:
         time_period_conversion = 9.375         # 15min period
 
+    cd = 0.24 if sol_rad > 1 else 0.96
+
     a1 = 1 / latent_ht
     a2 = (net_radiation - shf) * delta_sat_vp
     a3 = (time_period_conversion / (temperature_mean + 273)) * psy * ws * (sat_vp - avp)
-    a4 = delta_sat_vp + (psy * (1 + 0.34 * ws))
+    a4 = delta_sat_vp + (psy * (1 + cd * ws))
 
     return (a1 * a2 + a3) / a4
 
@@ -549,7 +552,7 @@ def net_in_sol_rad(sol_rad, albedo=0.23):
     return (1 - albedo) * sol_rad
 
 
-def net_out_lw_rad(temperature_min, temperature_max, sol_rad, cs_radiation, avp):
+def net_out_lw_rad(temperature_min, temperature_max, sol_rad, cs_radiation, avp, time_period="15min"):
     """
     Estimate net outgoing longwave radiation.
 
@@ -575,12 +578,25 @@ def net_out_lw_rad(temperature_min, temperature_max, sol_rad, cs_radiation, avp)
         ``cs_rad()``.
     :param avp: Actual vapour pressure [kPa]. Can be estimated using functions
         with names beginning with 'avp_from'.
+    :param time_period The period of time that will be used to calculate the result
+        ( Supported values: daily, hourly, half_hourly and 15min )
     :return: Net outgoing longwave radiation [MJ m-2 day-1]
     :rtype: float
     """
-    tmp1 = (STEFAN_BOLTZMANN_CONSTANT * ((math.pow(temperature_max, 4) + math.pow(temperature_min, 4)) / 2))
+    if time_period == "15min":
+        stefan_boltzmann = STEFAN_BOLTZMANN_CONSTANT / 96
+    elif time_period == 'half_hourly':
+        stefan_boltzmann = STEFAN_BOLTZMANN_CONSTANT / 48
+    elif time_period == 'hourly':
+        stefan_boltzmann = STEFAN_BOLTZMANN_CONSTANT / 24
+    else:
+        stefan_boltzmann = STEFAN_BOLTZMANN_CONSTANT
+
+    rad = (sol_rad / cs_radiation) if cs_radiation > 0 else 0.5
+
+    tmp1 = (stefan_boltzmann * ((math.pow(temperature_max, 4) + math.pow(temperature_min, 4)) / 2))
     tmp2 = (0.34 - (0.14 * math.sqrt(avp)))
-    tmp3 = 1.35 * (sol_rad / cs_radiation) - 0.35
+    tmp3 = 1.35 * rad - 0.35
     return tmp1 * tmp2 * tmp3
 
 

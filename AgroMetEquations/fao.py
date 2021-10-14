@@ -321,19 +321,19 @@ def et_rad_15min(latitude, longitude, solar_dec, ird, day_of_year, register_hour
     latitude = deg2rad(latitude)
 
     # b
-    b = (2*math.pi * (day_of_year - 81)) / 364
+    b = (2 * math.pi * (day_of_year - 81)) / 364
 
     # Seasonal Solar Time
-    sc = 0.1645 * math.sin(2*b) - 0.1255 * math.cos(b) - 0.025 * math.sin(b)
+    sc = 0.1645 * math.sin(2 * b) - 0.1255 * math.cos(b) - 0.025 * math.sin(b)
 
     # calculate t
     if not isinstance(register_hour, time):
         raise ValueError('Register hour is not a datetime object')
 
-    t = register_hour.hour + (register_hour.minute/60)
+    t = register_hour.hour + (register_hour.minute / 60)
 
     # Solar Time Angle
-    w = math.pi/12 * ((t + 0.06667 * (REFERENTIAL_LONGITUDE - longitude) + sc) - 12)
+    w = math.pi / 12 * ((t + 0.06667 * (REFERENTIAL_LONGITUDE - longitude) + sc) - 12)
 
     # w1
     w1 = w - ((math.pi * 0.25) / 24)
@@ -395,7 +395,7 @@ def fao56_penman_monteith(net_radiation, temperature_mean, ws, latent_ht, sat_vp
     elif time_period == "half_hourly":
         time_period_conversion = 18.75
     else:
-        time_period_conversion = 9.375         # 15min period
+        time_period_conversion = 9.375  # 15min period
 
     cd = 0.24 if sol_rad > 1 else 0.96
 
@@ -592,11 +592,21 @@ def net_out_lw_rad(temperature_min, temperature_max, sol_rad, cs_radiation, avp,
     else:
         stefan_boltzmann = STEFAN_BOLTZMANN_CONSTANT
 
-    rad = (sol_rad / cs_radiation) if cs_radiation > 0 else 0.5
+    if cs_radiation > 0 and sol_rad > 0:  # Fix to avoid division by Zero
+        rad = sol_rad / cs_radiation
+        if rad > 1:
+            rad = 1.0
+    else:
+        rad = 0.5
 
     tmp1 = (stefan_boltzmann * ((math.pow(temperature_max, 4) + math.pow(temperature_min, 4)) / 2))
     tmp2 = (0.34 - (0.14 * math.sqrt(avp)))
     tmp3 = 1.35 * rad - 0.35
+
+    # Apply constant if needed
+    # constant = 1.35 * 0.5 - 0.35 = 0.325
+    tmp3 = tmp3 if tmp3 < 0 else 0.325
+
     return tmp1 * tmp2 * tmp3
 
 
@@ -638,7 +648,7 @@ def psy_const(atmosphere_pressure, latent_ht):
     """
     cp = 0.001013
     ratio_molecular_weight_water_dryair = 0.622
-    
+
     return (cp * atmosphere_pressure) / (ratio_molecular_weight_water_dryair * latent_ht)
 
 

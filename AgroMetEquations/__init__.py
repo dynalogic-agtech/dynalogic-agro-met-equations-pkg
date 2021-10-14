@@ -55,6 +55,10 @@ from AgroMetEquations.thornthwaite import (
     monthly_mean_daylight_hours,
 )
 
+from AgroMetEquations.thornthwaite_mather_1955_waterbalance import (
+    waterbalance
+)
+
 from AgroMetEquations.general import (
     dew_point,
     frost_point,
@@ -118,6 +122,9 @@ __all__ = [
     # Thornthwaite method
     'thornthwaite',
     'monthly_mean_daylight_hours',
+
+    # Thornthwaite & Mather (1955)
+    'waterbalance',
 
     # General equations
     'frost_point',

@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "dynalogic-agro-met-equations-pkg"
+version = "1.0"
+description = "Library for agrometeorological calculation like evapotranspiration, water balance, degree days, water balance ..."
+authors = ["Bruno Ducraux <bducraux@dynalogic.net>"]
+license = "BSD 3-Clause"
+
+[tool.poetry.dependencies]
+python = ">=3.8"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.5"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

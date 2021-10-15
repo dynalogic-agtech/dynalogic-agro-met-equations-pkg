@@ -17,7 +17,6 @@ longitude_direction = 'W'
 temperature_min = 20
 temperature_max = 25
 temperature_mean = 20
-
 relative_humidity_mean = 70
 
 wind_speed = 3

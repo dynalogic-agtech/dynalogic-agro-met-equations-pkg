@@ -1,7 +1,7 @@
 from AgroMetEquations.thornthwaite_mather_1955_waterbalance import *
 
-def main():
 
+def main():
     cad = 78
 
     input_data = [
@@ -47,9 +47,8 @@ def main():
         {"et0": 39, "rain_fall": 11, "kc": 0.5}
     ]
 
-    negative_accumulated = False
-    water_storage = False
     cnt = 0
+    result_list = []
 
     for data in input_data:
         if cnt == 0:
@@ -58,29 +57,39 @@ def main():
 
         cnt = cnt + 1
 
-        relative_water_storage, water_storage, negative_accumulated, water_deficit, water_excess, alt, etr, etc = \
-            waterbalance(data["et0"],
-                         data["kc"],
-                         data["rain_fall"],
-                         last_negative_accumulated,
-                         last_water_storage,
-                         cad)
-        last_negative_accumulated = negative_accumulated
-        last_water_storage = water_storage
+        water_balance_info = waterbalance(
+            data["et0"],
+            data["kc"],
+            data["rain_fall"],
+            last_negative_accumulated,
+            last_water_storage,
+            cad)
+
+        last_negative_accumulated = water_balance_info["negative_accumulated"]
+        last_water_storage = water_balance_info["water_storage"]
 
         result_obj = {
             "id": cnt,
-            "relative_water_storage": relative_water_storage,
-            "water_storage": water_storage,
-            "negative_accumulated": negative_accumulated,
-            "water_deficit": water_deficit,
-            "water_excess": water_excess,
-            "alt": alt,
-            "etr": etr,
-            "etc": etc
+            "relative_water_storage": water_balance_info["relative_water_storage"],
+            "water_storage": water_balance_info["water_storage"],
+            "negative_accumulated": water_balance_info["negative_accumulated"],
+            "water_deficit": water_balance_info["water_deficit"],
+            "water_excess": water_balance_info["water_excess"],
+            "alt": water_balance_info["alt"],
+            "etr": water_balance_info["etr"],
+            "etc": water_balance_info["etc"]
         }
-        print(result_obj)
+        result_list.append(result_obj)
+
+    return result_list
+
+
+def test_day_1():
+    result = main()
+    assert result[0]["relative_water_storage"] == 100
 
 
 if __name__ == "__main__":
-    main()
+    result = main()
+
+    print(result)

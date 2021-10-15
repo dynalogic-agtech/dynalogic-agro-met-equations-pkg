@@ -1,7 +1,12 @@
 import math
 
 
-def waterbalance(et0, kc, rain_fall, last_negative_accumulated, last_water_storage, cad):
+def waterbalance(et0: float,
+                 kc: float,
+                 rain_fall: float,
+                 last_negative_accumulated: int,
+                 last_water_storage: int,
+                 cad: int) -> dict:
     """
     Thornthwaite & Mather (1955)
 
@@ -40,36 +45,48 @@ def waterbalance(et0, kc, rain_fall, last_negative_accumulated, last_water_stora
     # Step 8 -> Calculate Relative Water Storage
     relative_water_storage = round((water_storage / cad) * 100)
 
-    return relative_water_storage, water_storage, negative_accumulated, water_deficit, water_excess, alt, etr, etc
+    return {
+        "relative_water_storage": relative_water_storage,
+        "water_storage": water_storage,
+        "negative_accumulated": negative_accumulated,
+        "water_deficit": water_deficit,
+        "water_excess": water_excess,
+        "alt": alt,
+        "etr": etr,
+        "etc": etc
+    }
 
 
-def get_water_storage_negative_accumulated(water_storage, cad, last_negative_accumulated, p_etc):
+def get_water_storage_negative_accumulated(last_water_storage: int,
+                                           cad: int,
+                                           last_negative_accumulated: int,
+                                           p_etc: int) -> tuple:
+
+    water_storage = None
+    negative_accumulated = None
+
     # First negative value for p_etc
     if p_etc < 0 and last_negative_accumulated == 0:
         negative_accumulated = p_etc
-        water_storage = get_water_storage(p_etc, negative_accumulated, cad, water_storage)
-
-        return water_storage, negative_accumulated
+        water_storage = get_water_storage(p_etc, negative_accumulated, cad, last_water_storage)
 
     # p_etc negative
     if p_etc < 0 and last_negative_accumulated < 0:
         negative_accumulated = last_negative_accumulated + p_etc
-        water_storage = get_water_storage(p_etc, negative_accumulated, cad, water_storage)
-
-        return water_storage, negative_accumulated
+        water_storage = get_water_storage(p_etc, negative_accumulated, cad, last_water_storage)
 
     # p_etc positive after negative sequence
     if p_etc >= 0 >= last_negative_accumulated:
-        water_storage = get_water_storage(p_etc, last_negative_accumulated, cad, water_storage)
+        water_storage = get_water_storage(p_etc, last_negative_accumulated, cad, last_water_storage)
         negative_accumulated = round(cad * math.log(water_storage / cad)) if water_storage < cad else 0
 
-        return water_storage, negative_accumulated
+    return water_storage, negative_accumulated
 
 
-def get_water_storage(p_etc, negative_accumulated, cad, water_storage):
+def get_water_storage(p_etc: int, negative_accumulated: int, cad: int, last_water_storage: int) -> int:
     if p_etc < 0:
         water_storage = round(cad * math.exp(negative_accumulated / cad))
     else:
-        water_storage = round(water_storage + p_etc) if (water_storage + p_etc) < cad else cad
+        water_storage = round(last_water_storage + p_etc) if (last_water_storage + p_etc) < cad else cad
 
     return water_storage

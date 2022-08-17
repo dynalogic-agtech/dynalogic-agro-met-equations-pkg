@@ -1,45 +1,337 @@
 """
-Library of functions for estimating reference evapotransporation (ETo) for
-a grass reference crop using the FAO-56 Penman-Monteith and Hargreaves
-equations. The library includes numerous functions for estimating missing
-meteorological data.
+Library of functions for meteorological equations that can be used for general calculations and conversions.
 
-:copyright: (c) 2015 by Mark Richards.
+:author: Bruno Ducraux
+:copyright: (c) 2019 by Dynalogic.
 :license: BSD 3-Clause, see LICENSE.txt for more details.
 """
 
 import math
-from datetime import time
-
-from ._check import (
-    check_day_hours as _check_day_hours,
-    check_doy as _check_doy,
-    check_latitude_rad as _check_latitude_rad,
-    check_longitude as _check_longitude,
-    check_sol_dec_rad as _check_sol_dec_rad,
-    check_sunset_hour_angle_rad as _check_sunset_hour_angle_rad,
-)
-
-from .convert import deg2rad
-
-#: Solar constant [ MJ m-2 min-1]
-SOLAR_CONSTANT = 0.0820
-
-# Logitude of the center of local timezone
-REFERENTIAL_LONGITUDE = 45
-
-# Stefan Boltzmann constant [MJ K-4 m-2 day-1]
-STEFAN_BOLTZMANN_CONSTANT = 0.000000004903
-"""Stefan Boltzmann constant [MJ K-4 m-2 day-1]"""
+from datetime import time, date
+import calendar
+from AgroMetEquations.config import (_MIN_LATITUDE,
+                                     _MAX_LATITUDE,
+                                     _MIN_LONGITUDE,
+                                     _MAX_LONGITUDE,
+                                     _MIN_SOLAR_DECLINATION,
+                                     _MAX_SOLAR_DECLINATION,
+                                     _MIN_SUNSET_HOUR_ANGLE,
+                                     _MAX_SUNSET_HOUR_ANGLE,
+                                     SOLAR_CONSTANT,
+                                     REFERENTIAL_LONGITUDE,
+                                     STEFAN_BOLTZMANN_CONSTANT,
+                                     _MONTHDAYS,
+                                     _LEAP_MONTHDAYS)
 
 
-def atm_pressure(altitude):
+# ######################################################################################################################
+# VALIDATIONS
+# ######################################################################################################################
+
+def check_day_hours(hours, arg_name):
+    """
+    Check that *hours* is in the range 1 to 24.
+    """
+    if not 0 <= hours <= 24:
+        raise ValueError(
+            '{0} should be in range 0-24: {1!r}'.format(arg_name, hours))
+
+
+def check_day_of_year(day_of_year):
+    """
+    Check day of the year is valid.
+    """
+    if not 1 <= day_of_year <= 366:
+        raise ValueError(
+            'Day of the year (doy) must be in range 1-366: {0!r}'.format(day_of_year))
+
+
+def check_latitude(latitude):
+    if not _MIN_LATITUDE <= latitude <= _MAX_LATITUDE:
+        raise ValueError('latitude outside valid range {0!r} to {1!r} rad: {2!r}'.format(_MIN_LATITUDE,
+                                                                                         _MAX_LATITUDE,
+                                                                                         latitude))
+
+
+def check_longitude(longitude):
+    if not _MIN_LONGITUDE <= longitude <= _MAX_LONGITUDE:
+        raise ValueError('longitude outside valid range {0!r} to {1!r} rad: {2!r}'.format(_MIN_LATITUDE,
+                                                                                          _MAX_LATITUDE,
+                                                                                          longitude))
+
+
+def check_solar_declination(sd):
+    """
+    Solar declination can vary between -23.5 and +23.5 degrees.
+    See https://mypages.iit.edu/~maslanka/SolarGeo.pdf
+    """
+    if not _MIN_SOLAR_DECLINATION <= sd <= _MAX_SOLAR_DECLINATION:
+        raise ValueError(
+            'solar declination outside valid range {0!r} to {1!r} rad: {2!r}'.format(_MIN_SOLAR_DECLINATION,
+                                                                                     _MAX_SOLAR_DECLINATION,
+                                                                                     sd))
+
+
+def check_sunset_hour_angle(sha):
+    """
+    Sunset hour angle has the range 0 to 180 degrees.
+    See https://mypages.iit.edu/~maslanka/SolarGeo.pdf
+    """
+    if not _MIN_SUNSET_HOUR_ANGLE <= sha <= _MAX_SUNSET_HOUR_ANGLE:
+        raise ValueError(
+            'sunset hour angle outside valid range {0!r} to {1!r} rad: {2!r}'.format(_MIN_SUNSET_HOUR_ANGLE,
+                                                                                     _MAX_SUNSET_HOUR_ANGLE,
+                                                                                     sha))
+
+
+# ######################################################################################################################
+# CONVERSIONS
+# ######################################################################################################################
+
+
+def celsius2kelvin(celsius: float) -> float:
+    """
+    Convert temperature in degrees Celsius to degrees Kelvin.
+
+    :param celsius: float -> Degrees Celsius
+    :return: Degrees Kelvin
+    :rtype: float
+    """
+    return celsius + 273.15
+
+
+def kelvin2celsius(kelvin):
+    """
+    Convert temperature in degrees Kelvin to degrees Celsius.
+
+    :param kelvin: float -> Degrees Kelvin
+    :return: Degrees Celsius
+    :rtype: float
+    """
+    return kelvin - 273.15
+
+
+def deg2rad(degrees: float) -> float:
+    """
+    Convert angular degrees to radians
+
+    :param degrees: float -> Value in degrees to be converted.
+    :return: Value in radians
+    :rtype: float
+    """
+    return degrees * (math.pi / 180.0)
+
+
+def rad2deg(radians):
+    """
+    Convert radians to angular degrees
+
+    :param radians: Value in radians to be converted.
+    :return: Value in angular degrees
+    :rtype: float
+    """
+    return radians * (180.0 / math.pi)
+
+
+def watt2mj15min(watt):
+    """
+    Convert watt/m2 to MJ/m2/15min
+    :param watt:
+    :return: MJ/m2/15min
+    :rtype: float
+    """
+    return watt * 0.0009
+
+
+def daily_to_15min(daily_value):
+    """
+    Transform daily value to 15min value
+    (daily_value / 24) / 4 = daily_value / 96
+    :param daily_value:
+    :return: 15min value
+    """
+    return daily_value / 96
+
+
+def dms2dd(degrees, minutes, seconds, direction: str):
+    """
+    Convert degrees, minutes, seconds to decimal degrees.
+    :param degrees: float
+    :param minutes: float
+    :param seconds: float
+    :param direction: str -> 'N', 'S', 'E', 'W'
+    :return:
+    """
+    dd = float(degrees) + float(minutes) / 60 + float(seconds) / (60 * 60)
+    if direction == 'S' or direction == 'W':
+        dd *= -1
+    return dd
+
+
+def dd2dms(dd) -> tuple:
+    """
+    Convert decimal degrees to degrees, minutes, seconds.
+    :param dd:
+    :return: tuple -> degrees, minutes, seconds
+    """
+    negative = dd < 0
+    dd = abs(dd)
+    minutes, seconds = divmod(dd * 3600, 60)
+    degrees, minutes = divmod(minutes, 60)
+    if negative:
+        if degrees > 0:
+            degrees = -degrees
+        elif minutes > 0:
+            minutes = -minutes
+        else:
+            seconds = -seconds
+
+    return degrees, minutes, seconds
+
+
+def energy2evap(energy, _latent_heat):
+    """
+    Convert energy (e.g. radiation energy) in MJ m-2 time to the equivalent
+    evaporation, assuming a grass reference crop.
+
+    Energy is converted to equivalent evaporation using a conversion
+    factor equal to the inverse of the latent heat of vapourisation
+    (1 / _latent_heat).
+
+    :param energy: Energy e.g. radiation or heat flux [MJ m-2 time].
+    :param _latent_heat Calculated by latent_heat(temperature_mean)
+    :return: Equivalent evaporation [mm time-1].
+    :rtype: float
+    """
+    return (1 / _latent_heat) * energy
+
+
+# ######################################################################################################################
+# GENERAL CALCULATIONS
+# ######################################################################################################################
+
+
+def get_frost_point(temperature_mean, _dew_point):
+    """Compute the frost point in degrees Celsius
+    :param temperature_mean: current ambient temperature in degrees Celsius
+    :type temperature_mean: float
+    :param _dew_point: current dew point in degrees Celsius
+    :type _dew_point: float
+    :return: the frost point in degrees Celsius
+    :rtype: float
+    """
+    dew_point_k = 273.15 + _dew_point
+    dew_point_k = 273.15 + _dew_point
+    t_air_k = 273.15 + temperature_mean
+    frost_point_k = dew_point_k - t_air_k + 2671.02 / ((2954.61 / t_air_k) + 2.193665 * math.log(t_air_k) - 13.3448)
+    return frost_point_k - 273.15
+
+
+def get_dew_point(temperature_mean, relative_humidity_mean):
+    """Compute the dew point in degrees Celsius
+    :param temperature_mean: current ambient temperature in degrees Celsius
+    :type temperature_mean: float
+    :param relative_humidity_mean: relative humidity in %
+    :type relative_humidity_mean: float
+    :return: the dew point in degrees Celsius
+    :rtype: float
+    """
+    ref_a = 17.27
+    ref_b = 237.3
+    alpha = ((ref_a * temperature_mean) / (ref_b + temperature_mean)) + math.log(relative_humidity_mean / 100.0)
+    return (ref_b * alpha) / (ref_a - alpha)
+
+
+def get_degree_day(temperature_mean, temperature_basal_inferior, **kwargs):
+    # optional args for more accurate value
+    temperature_basal_superior = kwargs.get('temperature_basal_superior')
+    temperature_max = kwargs.get('temperature_max')
+    temperature_min = kwargs.get('temperature_min')
+
+    if all(key in kwargs for key in ('temperature_basal_superior', 'temperature_max', 'temperature_min')):
+        # complete formula
+        deg_day = None
+
+        if temperature_basal_superior > temperature_max > temperature_min > temperature_basal_inferior:
+            deg_day = ((temperature_max - temperature_min) / 2) + temperature_min + temperature_basal_inferior
+        elif temperature_basal_superior > temperature_max > temperature_basal_inferior > temperature_min:
+            tmp = math.pow((temperature_max - temperature_basal_inferior), 2)
+            tmp1 = (2 * (temperature_max - temperature_min))
+            deg_day = tmp / tmp1
+        elif temperature_basal_superior > temperature_basal_inferior > temperature_max > temperature_min:
+            deg_day = 0
+        elif temperature_max > temperature_basal_superior > temperature_min > temperature_basal_inferior:
+            temp_dif = temperature_max - temperature_min
+            tmp = (2 * temp_dif) * (temperature_min - temperature_basal_inferior)
+            tmp1 = math.pow(temp_dif, 2)
+            tmp2 = math.pow((temperature_max - temperature_basal_superior), 2)
+            tmp3 = 2 * temp_dif
+            deg_day = (tmp + tmp1 - tmp2) / tmp3
+        elif temperature_max > temperature_basal_superior > temperature_basal_inferior > temperature_min:
+            tmp = math.pow((temperature_max - temperature_basal_inferior), 2)
+            tmp1 = math.pow((temperature_max - temperature_basal_superior), 2)
+            tmp2 = 2 * (temperature_max - temperature_min)
+            deg_day = (tmp - tmp1) / tmp2
+        return deg_day
+    else:
+        # simplified formula
+        print("simplified formula")
+        return temperature_mean - temperature_basal_inferior
+
+
+def get_days_passed_on_current_year():
+    """
+    Calculate the days passed until today date
+    :return: int
+    """
+    today = date.today()
+    return today.timetuple().tm_yday
+
+
+def get_sunrise_sunset_hour(_sunset_hour_angle):
+    """
+    :param _sunset_hour_angle:
+    :return: tuple with sunset hour and sunrise hour
+    """
+
+    # Sunrise
+    hour_to_sunrise = 12 + (- round(_sunset_hour_angle / 15, 2))
+
+    split_hour = math.modf(hour_to_sunrise)
+
+    sunrise_hour = split_hour[1]
+    sunrise_minutes = 60 * split_hour[0]
+    sunrise = "{}:{}".format(int(sunrise_hour), int(sunrise_minutes))
+
+    # Sunset
+    hour_to_sunset = 12 - (- round(_sunset_hour_angle / 15, 2))
+
+    split_hour = math.modf(hour_to_sunset)
+
+    sunset_hour = split_hour[1]
+    sunset_minutes = 60 * split_hour[0]
+    sunset = "{}:{}".format(int(sunset_hour), int(sunset_minutes))
+
+    return sunrise, sunset
+
+
+def get_vapour_pressure_deficit(es, ea):
+    """
+    VPD - Vapour Pressure Deficit
+    :param es:
+    :param ea: calculated by vp_from_rhmin_rhmax()
+    :return:
+    """
+    return es - ea
+
+
+def get_atm_pressure(altitude) -> float:
     """
     Estimate atmospheric pressure from altitude.
 
     Calculated using a simplification of the ideal gas law, assuming 20 degrees
     Celsius for a standard atmosphere. Based on equation 7, page 62 in Allen
-    et al (1998).
+    et al. (1998).
 
     :param altitude: Elevation/altitude above sea level [m]
     :return: atmospheric pressure [kPa]
@@ -49,7 +341,7 @@ def atm_pressure(altitude):
     return math.pow(temp, 5.26) * 101.3
 
 
-def avp_from_temperature_min(temperature_min):
+def get_avp_from_temperature_min(temperature_min):
     """
     Estimate actual vapour pressure (*ea*) from minimum temperature.
 
@@ -62,7 +354,7 @@ def avp_from_temperature_min(temperature_min):
     In these areas it may be better to subtract 2 deg C from the
     minimum temperature (see Annex 6 in FAO paper).
 
-    Based on equation 48 in Allen et al (1998).
+    Based on equation 48 in Allen et al. (1998).
 
     :param temperature_min: Daily minimum temperature [deg C]
     :return: Actual vapour pressure [kPa]
@@ -71,12 +363,12 @@ def avp_from_temperature_min(temperature_min):
     return 0.611 * math.exp((17.27 * temperature_min) / (temperature_min + 237.3))
 
 
-def avp_from_rhmin_rhmax(svp_temperature_min, svp_temperature_max, relative_humidity_min, rh_max):
+def get_avp_from_rhmin_rhmax(svp_temperature_min, svp_temperature_max, relative_humidity_min, rh_max) -> float:
     """
     Estimate actual vapour pressure (*ea*) from saturation vapour pressure and
     relative humidity.
 
-    Based on FAO equation 17 in Allen et al (1998).
+    Based on FAO equation 17 in Allen et al. (1998).
 
     :param svp_temperature_min: Saturation vapour pressure at daily minimum temperature
         [kPa]. Can be estimated using ``svp_from_t()``.
@@ -92,7 +384,7 @@ def avp_from_rhmin_rhmax(svp_temperature_min, svp_temperature_max, relative_humi
     return (tmp1 + tmp2) / 2.0
 
 
-def avp_from_rhmax(svp_temperature_min, relative_humidity_max):
+def get_avp_from_rhmax(svp_temperature_min, relative_humidity_max):
     """
     Estimate actual vapour pressure (*e*a) from saturation vapour pressure at
     daily minimum temperature and maximum relative humidity
@@ -108,7 +400,7 @@ def avp_from_rhmax(svp_temperature_min, relative_humidity_max):
     return svp_temperature_min * (relative_humidity_max / 100.0)
 
 
-def avp_from_rhmean(svp_temperature_min, svp_temperature_max, relative_humidity_mean):
+def get_avp_from_rhmean(svp_temperature_min, svp_temperature_max, relative_humidity_mean):
     """
     Estimate actual vapour pressure (*ea*) from saturation vapour pressure at
     daily minimum and maximum temperature, and mean relative humidity.
@@ -126,7 +418,7 @@ def avp_from_rhmean(svp_temperature_min, svp_temperature_max, relative_humidity_
     return (relative_humidity_mean / 100.0) * ((svp_temperature_max + svp_temperature_min) / 2.0)
 
 
-def avp_from_tdew(tdew):
+def get_avp_from_tdew(tdew):
     """
     Estimate actual vapour pressure (*ea*) from dewpoint temperature.
 
@@ -145,7 +437,7 @@ def avp_from_tdew(tdew):
     return 0.6108 * math.exp((17.27 * tdew) / (tdew + 237.3))
 
 
-def avp_from_twet_tdry(twet, tdry, svp_twet, psyc_const):
+def get_avp_from_twet_tdry(twet, tdry, svp_twet, psyc_const):
     """
     Estimate actual vapour pressure (*ea*) from wet and dry bulb temperature.
 
@@ -173,7 +465,7 @@ def avp_from_twet_tdry(twet, tdry, svp_twet, psyc_const):
     return svp_twet - (psyc_const * (tdry - twet))
 
 
-def cs_rad(altitude, ext_rad):
+def get_clear_sky_radiation(altitude, ext_rad):
     """
     Estimate clear sky radiation from altitude and extraterrestrial radiation.
 
@@ -189,7 +481,7 @@ def cs_rad(altitude, ext_rad):
     return (0.00002 * altitude + 0.75) * ext_rad
 
 
-def daily_mean_t(temperature_min, temperature_max):
+def get_daily_mean_temperature(temperature_min, temperature_max):
     """
     Estimate mean daily temperature from the daily minimum and maximum
     temperatures.
@@ -202,27 +494,27 @@ def daily_mean_t(temperature_min, temperature_max):
     return (temperature_max + temperature_min) / 2.0
 
 
-def daylight_hours(sha):
+def get_daylight_hours(sunset_hour_angle):
     """
     Calculate daylight hours from sunset hour angle.
 
     Based on FAO equation 34 in Allen et al (1998).
 
-    :param sha: Sunset hour angle [rad]. Can be calculated using
-        ``sunset_hour_angle()``.
+    :param sunset_hour_angle: Sunset hour angle [rad]. Can be calculated using
+        ``calculate_sunset_hour_angle()``.
     :return: Daylight hours.
     :rtype: float
     """
-    _check_sunset_hour_angle_rad(sha)
-    return (24.0 / math.pi) * sha
+    check_sunset_hour_angle(sunset_hour_angle)
+    return (24.0 / math.pi) * sunset_hour_angle
 
 
-def delta_svp(t):
+def get_delta_svp(t):
     """
     Estimate the slope of the saturation vapour pressure curve at a given
     temperature.
 
-    Based on equation 13 in Allen et al (1998). If using in the Penman-Monteith
+    Based on equation 13 in Allen et al. (1998). If using in the Penman-Monteith
     *t* should be the mean air temperature.
 
     :param t: Air temperature [deg C]. Use mean air temperature for use in
@@ -234,33 +526,18 @@ def delta_svp(t):
     return tmp / math.pow((t + 237.3), 2)
 
 
-def energy2evap(energy, _latent_heat):
-    """
-    Convert energy (e.g. radiation energy) in MJ m-2 time to the equivalent
-    evaporation, assuming a grass reference crop.
-
-    Energy is converted to equivalent evaporation using a conversion
-    factor equal to the inverse of the latent heat of vapourisation
-    (1 / _latent_heat).
-
-    :param energy: Energy e.g. radiation or heat flux [MJ m-2 time].
-    :param _latent_heat Calculated by latent_heat(temperature_mean)
-    :return: Equivalent evaporation [mm time-1].
-    :rtype: float
-    """
-    return (1 / _latent_heat) * energy
-
-
-def latent_heat(temperature_mean):
+def get_latent_heat(temperature_mean):
     return (2500 - (2.37 * temperature_mean)) / 1000
 
 
-def et_rad(latitude, solar_dec, sha, ird):
+def get_daily_extraterrestrial_radiation(latitude, solar_dec,
+                                         sunset_hour_angle,
+                                         inverse_relative_distance_earth_sun):
     """
     Estimate daily extraterrestrial radiation (*Ra*, 'top of the atmosphere
     radiation').
 
-    Based on equation 21 in Allen et al (1998). If monthly mean radiation is
+    Based on equation 21 in Allen et al. (1998). If monthly mean radiation is
     required make sure *sol_dec*. *sha* and *irl* have been calculated using
     the day of the year that corresponds to the middle of the month.
 
@@ -271,30 +548,30 @@ def et_rad(latitude, solar_dec, sha, ird):
 
     :param latitude: Latitude [radians]
     :param solar_dec: Solar declination [radians]. Can be calculated using
-        ``sol_dec()``.
-    :param sha: Sunset hour angle [radians]. Can be calculated using
-        ``sunset_hour_angle()``.
-    :param ird: Inverse relative distance earth-sun [dimensionless]. Can be
+        ``calculate_solar_declination()``.
+    :param sunset_hour_angle: Sunset hour angle [radians]. Can be calculated using
+        ``calculate_sunset_hour_angle()``.
+    :param inverse_relative_distance_earth_sun: Inverse relative distance earth-sun [dimensionless]. Can be
         calculated using ``inv_rel_dist_earth_sun()``.
     :return: Daily extraterrestrial radiation [MJ m-2 day-1]
     :rtype: float
     """
-    _check_latitude_rad(latitude)
-    _check_sol_dec_rad(solar_dec)
-    _check_sunset_hour_angle_rad(sha)
+    check_latitude(latitude)
+    check_solar_declination(solar_dec)
+    check_sunset_hour_angle(sunset_hour_angle)
 
     tmp1 = (24.0 * 60.0) / math.pi
-    tmp2 = sha * math.sin(latitude) * math.sin(solar_dec)
-    tmp3 = math.cos(latitude) * math.cos(solar_dec) * math.sin(sha)
-    return tmp1 * SOLAR_CONSTANT * ird * (tmp2 + tmp3)
+    tmp2 = sunset_hour_angle * math.sin(latitude) * math.sin(solar_dec)
+    tmp3 = math.cos(latitude) * math.cos(solar_dec) * math.sin(sunset_hour_angle)
+    return tmp1 * SOLAR_CONSTANT * inverse_relative_distance_earth_sun * (tmp2 + tmp3)
 
 
-def et_rad_15min(latitude, longitude, solar_dec, ird, day_of_year, register_hour):
+def get_15min_extraterrestrial_radiation(latitude, longitude, solar_dec, ird, day_of_year, register_hour):
     """
-    Estimate daily extraterrestrial radiation (*Ra*, 'top of the atmosphere
+    Estimate 15 minutes extraterrestrial radiation (*Ra*, 'top of the atmosphere
     radiation').
 
-    Based on equation 21 in Allen et al (1998). If monthly mean radiation is
+    Based on equation 21 in Allen et al. (1998). If monthly mean radiation is
     required make sure *sol_dec*. *sha* and *irl* have been calculated using
     the day of the year that corresponds to the middle of the month.
 
@@ -308,15 +585,15 @@ def et_rad_15min(latitude, longitude, solar_dec, ird, day_of_year, register_hour
     :param solar_dec: Solar declination [radians]. Can be calculated using
         ``sol_dec()``.
     :param ird: Inverse relative distance earth-sun [dimensionless]. Can be
-        calculated using ``inv_rel_dist_earth_sun()``.
+        calculated using ``get_inverse_relative_distance_earth_sun()``.
     :param day_of_year: day of year of the register
     :param register_hour: time object
     :return: Daily extraterrestrial radiation [MJ m-2 day-1]
     :rtype: float
     """
-    _check_latitude_rad(latitude)
-    _check_longitude(longitude)
-    _check_sol_dec_rad(solar_dec)
+    check_latitude(latitude)
+    check_longitude(longitude)
+    check_solar_declination(solar_dec)
 
     latitude = deg2rad(latitude)
 
@@ -353,61 +630,7 @@ def et_rad_15min(latitude, longitude, solar_dec, ird, day_of_year, register_hour
     return et_rad_value
 
 
-def fao56_penman_monteith(net_radiation, temperature_mean, ws, latent_ht, sat_vp, avp,
-                          delta_sat_vp, psy, sol_rad, shf=0.0, time_period="15min"):
-    """
-    Estimate reference evapotranspiration (ETo) from a hypothetical
-    short grass reference surface using the FAO-56 Penman-Monteith equation.
-
-    Based on equation 6 in Allen et al (1998).
-
-    :param net_radiation: Net radiation at crop surface [MJ m-2 day-1]. If
-        necessary this can be estimated using ``net_rad()``.
-    :param temperature_mean: Air temperature at 2 m height [deg Celsius].
-    :param ws: Wind speed at 2 m height [m s-1]. If not measured at 2m,
-        convert using ``wind_speed_at_2m()``.
-    :param latent_ht: Letent heat Can be calculated using ``latent_heat(temperature_mean)``.
-    :param sat_vp: Saturation vapour pressure [kPa]. Can be estimated using
-        ``svp_from_t()''.
-    :param avp: Actual vapour pressure [kPa]. Can be estimated using a range
-        of functions with names beginning with 'avp_from'.
-    :param delta_sat_vp: Slope of saturation vapour pressure curve [kPa degC-1].
-        Can be estimated using ``delta_svp()``.
-    :param psy: Psychrometric constant [kPa deg C]. Can be estimated using
-        ``psy_const_of_psychrometer()`` or ``psy_const()``.
-    :param sol_rad: Solar Radiation to calculate the day and night period
-    :param shf: Soil heat flux (G) [MJ m-2 day-1] (default is 0.0, which is
-        reasonable for a daily or 10-day time steps). For monthly time steps
-        *shf* can be estimated using ``monthly_soil_heat_flux()`` or
-        ``monthly_soil_heat_flux2()``.
-    :param time_period The period of time that will be used to calculate the result
-        ( Supported values: daily, hourly, half_hourly and 15min )
-    :return: Reference evapotranspiration (ETo) from a hypothetical
-        grass reference surface [mm day-1].
-    :rtype: float
-    """
-
-    # time period conversion
-    if time_period == "daily":
-        time_period_conversion = 900
-    elif time_period == "hourly":
-        time_period_conversion = 37.5
-    elif time_period == "half_hourly":
-        time_period_conversion = 18.75
-    else:
-        time_period_conversion = 9.375  # 15min period
-
-    cd = 0.24 if sol_rad > 1 else 0.96
-
-    a1 = 1 / latent_ht
-    a2 = (net_radiation - shf) * delta_sat_vp
-    a3 = (time_period_conversion / (temperature_mean + 273)) * psy * ws * (sat_vp - avp)
-    a4 = delta_sat_vp + (psy * (1 + cd * ws))
-
-    return (a1 * a2 + a3) / a4
-
-
-def hargreaves(temperature_min, temperature_max, temperature_mean, et_radiation):
+def get_reference_evapotranspiration_over_grass(temperature_min, temperature_max, temperature_mean, et_radiation):
     """
     Estimate reference evapotranspiration over grass (ETo) using the Hargreaves
     equation.
@@ -418,7 +641,7 @@ def hargreaves(temperature_min, temperature_max, temperature_mean, et_radiation)
     the FAO Penman-Monteith equation. However, as an alternative, ETo can be
     estimated using the Hargreaves ETo equation.
 
-    Based on equation 52 in Allen et al (1998).
+    Based on equation 52 in Allen et al. (1998).
 
     :param temperature_min: Minimum daily temperature [deg C]
     :param temperature_max: Maximum daily temperature [deg C]
@@ -435,7 +658,7 @@ def hargreaves(temperature_min, temperature_max, temperature_mean, et_radiation)
     return 0.0023 * (temperature_mean + 17.8) * (temperature_max - temperature_min) ** 0.5 * 0.408 * et_radiation
 
 
-def inv_rel_dist_earth_sun(day_of_year):
+def get_inverse_relative_distance_earth_sun(day_of_year):
     """
     Calculate the inverse relative distance between earth and sun from
     day of the year.
@@ -446,11 +669,11 @@ def inv_rel_dist_earth_sun(day_of_year):
     :return: Inverse relative distance between earth and the sun
     :rtype: float
     """
-    _check_doy(day_of_year)
+    check_day_of_year(day_of_year)
     return 1 + (0.033 * math.cos((2.0 * math.pi / 365.0) * day_of_year))
 
 
-def mean_svp(temperature_min, temperature_max):
+def get_mean_saturation_vapor_pressure(temperature_min, temperature_max):
     """
     Estimate mean saturation vapour pressure, *es* [kPa] from minimum and
     maximum temperature.
@@ -466,16 +689,16 @@ def mean_svp(temperature_min, temperature_max):
     :return: Mean saturation vapour pressure (*es*) [kPa]
     :rtype: float
     """
-    return (svp_from_t(temperature_min) + svp_from_t(temperature_max)) / 2.0
+    return (get_svp_from_temp(temperature_min) + get_svp_from_temp(temperature_max)) / 2.0
 
 
 # not used at the moment
-def monthly_soil_heat_flux(t_month_prev, t_month_next):
+def get_monthly_soil_heat_flux(t_month_prev, t_month_next):
     """
     Estimate monthly soil heat flux (Gmonth) from the mean air temperature of
     the previous and next month, assuming a grass crop.
 
-    Based on equation 43 in Allen et al (1998). If the air temperature of the
+    Based on equation 43 in Allen et al. (1998). If the air temperature of the
     next month is not known use ``monthly_soil_heat_flux2()`` instead. The
     resulting heat flux can be converted to equivalent evaporation [mm day-1]
     using ``energy2evap()``.
@@ -489,43 +712,43 @@ def monthly_soil_heat_flux(t_month_prev, t_month_next):
     return 0.07 * (t_month_next - t_month_prev)
 
 
-# not used at the moment
-def monthly_soil_heat_flux2(t_month_prev, t_month_cur):
+def get_monthly_soil_heat_flux2(previous_month_temperature, current_month_temperature):
     """
     Estimate monthly soil heat flux (Gmonth) [MJ m-2 day-1] from the mean
     air temperature of the previous and current month, assuming a grass crop.
 
-    Based on equation 44 in Allen et al (1998). If the air temperature of the
+    Based on equation 44 in Allen et al. (1998). If the air temperature of the
     next month is available, use ``monthly_soil_heat_flux()`` instead. The
     resulting heat flux can be converted to equivalent evaporation [mm day-1]
     using ``energy2evap()``.
 
-    Arguments:
-    :param t_month_prev: Mean air temperature of the previous month
+    :param previous_month_temperature: Mean air temperature of the previous month
         [deg Celsius]
-    :param t_month_cur: Mean air temperature of the current month [deg Celsius]
+    :param current_month_temperature: Mean air temperature of the current month [deg Celsius]
     :return: Monthly soil heat flux (Gmonth) [MJ m-2 day-1]
     :rtype: float
     """
-    return 0.14 * (t_month_cur - t_month_prev)
+    return 0.14 * (current_month_temperature - previous_month_temperature)
 
 
-def soil_heat_flux_by_nightday_period(rn, isday=True):
+def get_soil_heat_flux_by_night_or_day_period(net_radiation, is_day=True) -> float:
     """
+    Calculate soil heat flux (G) [MJ m-2 15min] from net radiation by night or day period.
 
-    :param rn: Net radiation at crop surface
-    :param isday: variable to say if is day period or night period
+    :param net_radiation: Net radiation at crop surface
+    :param is_day: variable to say if is day period or night period
     :return: Shorten period heat flux [MJ m-2 15min]
+    :rtype: float
     """
-    if isday:
-        soil_heat_flux = 0.1 * rn
+    if is_day:
+        soil_heat_flux = 0.1 * net_radiation
     else:
-        soil_heat_flux = 0.5 * rn
+        soil_heat_flux = 0.5 * net_radiation
 
     return soil_heat_flux
 
 
-def net_in_sol_rad(sol_rad, albedo=0.23):
+def get_net_in_sol_rad(sol_rad, albedo=0.23):
     """
     Calculate net incoming solar (or shortwave) radiation from gross
     incoming solar radiation, assuming a grass reference crop.
@@ -535,7 +758,7 @@ def net_in_sol_rad(sol_rad, albedo=0.23):
     output can be converted to equivalent evaporation [mm day-1] using
     ``energy2evap()``.
 
-    Based on FAO equation 38 in Allen et al (1998).
+    Based on FAO equation 38 in Allen et al. (1998).
 
     :param sol_rad: Gross incoming solar radiation [MJ m-2 day-1]. If
         necessary this can be estimated using functions whose name
@@ -552,7 +775,7 @@ def net_in_sol_rad(sol_rad, albedo=0.23):
     return (1 - albedo) * sol_rad
 
 
-def net_out_lw_rad(temperature_min, temperature_max, sol_rad, cs_radiation, avp, time_period="15min"):
+def get_net_out_lw_rad(temperature_min, temperature_max, sol_rad, cs_radiation, avp, time_period="15min"):
     """
     Estimate net outgoing longwave radiation.
 
@@ -560,8 +783,8 @@ def net_out_lw_rad(temperature_min, temperature_max, sol_rad, cs_radiation, avp,
     earth's surface. It is proportional to the absolute temperature of
     the surface raised to the fourth power according to the Stefan-Boltzmann
     law. However, water vapour, clouds, carbon dioxide and dust are absorbers
-    and emitters of longwave radiation. This function corrects the Stefan-
-    Boltzmann law for humidity (using actual vapor pressure) and cloudiness
+    and emitters of long wave radiation. This function corrects the Stefan-Boltzmann
+    law for humidity (using actual vapor pressure) and cloudiness
     (using solar radiation and clear sky radiation). The concentrations of all
     other absorbers are assumed to be constant.
 
@@ -610,7 +833,7 @@ def net_out_lw_rad(temperature_min, temperature_max, sol_rad, cs_radiation, avp,
     return tmp1 * tmp2 * tmp3
 
 
-def net_rad(ni_sw_rad, no_lw_rad):
+def get_net_rad(ni_sw_rad, no_lw_rad):
     """
     Calculate net radiation at the crop surface by time, assuming a grass
     reference crop.
@@ -631,7 +854,7 @@ def net_rad(ni_sw_rad, no_lw_rad):
     return ni_sw_rad - no_lw_rad
 
 
-def psy_const(atmosphere_pressure, latent_ht):
+def get_psy_const(atmosphere_pressure, latent_ht):
     """
     Calculate the psychrometric constant.
 
@@ -652,7 +875,7 @@ def psy_const(atmosphere_pressure, latent_ht):
     return (cp * atmosphere_pressure) / (ratio_molecular_weight_water_dryair * latent_ht)
 
 
-def psy_const_of_psychrometer(psychrometer, atmos_pres):
+def get_psy_const_of_psychrometer(psychrometer, atmos_pres):
     """
     Calculate the psychrometric constant for different types of
     psychrometer at a given atmospheric pressure.
@@ -668,7 +891,7 @@ def psy_const_of_psychrometer(psychrometer, atmos_pres):
         3. non ventilated psychrometer installed indoors
     :param atmos_pres: Atmospheric pressure [kPa]. Can be estimated using
         ``atm_pressure()``.
-    :return: Psychrometric constant [kPa degC-1].
+    :return: Psychometric constant [kPa degC-1].
     :rtype: float
     """
     # Select coefficient based on type of ventilation of the wet bulb
@@ -685,7 +908,7 @@ def psy_const_of_psychrometer(psychrometer, atmos_pres):
     return psy_coeff * atmos_pres
 
 
-def rh_from_avp_svp(avp, sat_vp):
+def get_rh_from_avp_svp(avp, sat_vp):
     """
     Calculate relative humidity as the ratio of actual vapour pressure
     to saturation vapour pressure at the same temperature.
@@ -703,21 +926,21 @@ def rh_from_avp_svp(avp, sat_vp):
     return 100.0 * avp / sat_vp
 
 
-def sol_dec(day_of_year):
+def get_solar_declination(day_of_year):
     """
     Calculate solar declination from day of the year.
 
     Based on FAO equation 24 in Allen et al (1998).
 
-    :param day_of_year: Day of year integer between 1 and 365 or 366).
+    :param day_of_year: Day of year integer between 1 and 365 or 366.
     :return: solar declination [radians]
     :rtype: float
     """
-    _check_doy(day_of_year)
+    check_day_of_year(day_of_year)
     return 0.409 * math.sin(((2.0 * math.pi / 365.0) * day_of_year - 1.39))
 
 
-def sol_rad_from_sun_hours(dl_hours, sunshine_hours, et_radiation):
+def get_sol_rad_from_sun_hours(dl_hours, sunshine_hours, et_radiation):
     """
     Calculate incoming solar (or shortwave) radiation, *Rs* (radiation hitting
     a horizontal plane after scattering by the atmosphere) from relative
@@ -741,15 +964,15 @@ def sol_rad_from_sun_hours(dl_hours, sunshine_hours, et_radiation):
     :return: Incoming solar (or shortwave) radiation [MJ m-2 day-1]
     :rtype: float
     """
-    _check_day_hours(sunshine_hours, 'sun_hours')
-    _check_day_hours(dl_hours, 'daylight_hours')
+    check_day_hours(sunshine_hours, 'sun_hours')
+    check_day_hours(dl_hours, 'daylight_hours')
 
     # 0.5 and 0.25 are default values of regression constants (Angstrom values)
     # recommended by FAO when calibrated values are unavailable.
     return (0.5 * sunshine_hours / dl_hours + 0.25) * et_radiation
 
 
-def sol_rad_from_t(et_radiation, cs_radiation, temperature_min, temperature_max, coastal):
+def get_solar_radiation_from_temperature(et_radiation, cs_radiation, temperature_min, temperature_max, coastal):
     """
     Estimate incoming solar (or shortwave) radiation, *Rs*, (radiation hitting
     a horizontal plane after scattering by the atmosphere) from min and max
@@ -793,7 +1016,7 @@ def sol_rad_from_t(et_radiation, cs_radiation, temperature_min, temperature_max,
     return min(sol_rad, cs_radiation)
 
 
-def sol_rad_island(et_radiation):
+def get_solar_radiation_island(et_radiation):
     """
     Estimate incoming solar (or shortwave) radiation, *Rs* (radiation hitting
     a horizontal plane after scattering by the atmosphere) for an island
@@ -816,7 +1039,7 @@ def sol_rad_island(et_radiation):
     return (0.7 * et_radiation) - 4.0
 
 
-def sunset_hour_angle(latitude, solar_dec):
+def get_sunset_hour_angle(latitude, solar_declination):
     """
     Calculate sunset hour angle (*Ws*) from latitude and solar
     declination.
@@ -826,24 +1049,24 @@ def sunset_hour_angle(latitude, solar_dec):
     :param latitude: Latitude [radians]. Note: *latitude* should be negative
         if it in the southern hemisphere, positive if in the northern
         hemisphere.
-    :param solar_dec: Solar declination [radians]. Can be calculated using
+    :param solar_declination: Solar declination [radians]. Can be calculated using
         ``sol_dec()``.
     :return: Sunset hour angle [radians].
     :rtype: float
     """
-    _check_latitude_rad(latitude)
-    _check_sol_dec_rad(solar_dec)
+    check_latitude(latitude)
+    check_solar_declination(solar_declination)
 
-    cos_sha = -math.tan(latitude) * math.tan(solar_dec)
+    cos_sha = -math.tan(latitude) * math.tan(solar_declination)
     # If tmp is >= 1 there is no sunset, i.e. 24 hours of daylight
     # If tmp is <= 1 there is no sunrise, i.e. 24 hours of darkness
-    # See http://www.itacanet.org/the-sun-as-a-source-of-energy/
+    # See https://www.itacanet.org/the-sun-as-a-source-of-energy/
     # part-3-calculating-solar-angles/
     # Domain of acos is -1 <= x <= 1 radians (this is not mentioned in FAO-56!)
     return math.acos(min(max(cos_sha, -1.0), 1.0))
 
 
-def svp_from_t(t):
+def get_svp_from_temp(t):
     """
     Estimate saturation vapour pressure (*es*) from air temperature.
 
@@ -856,11 +1079,11 @@ def svp_from_t(t):
     return 0.6108 * math.exp((17.27 * t) / (t + 237.3))
 
 
-def svp(svp_min, svp_max):
+def get_svp(svp_min, svp_max):
     return (svp_max + svp_min) / 2
 
 
-def wind_speed_2m(ws, z):
+def get_wind_speed_2m(ws, z):
     """
     Convert wind speed measured at different heights above the soil
     surface to wind speed at 2 m above the surface, assuming a short grass
@@ -874,3 +1097,36 @@ def wind_speed_2m(ws, z):
     :rtype: float
     """
     return ws * (4.87 / math.log((67.8 * z) - 5.42))
+
+
+def get_monthly_mean_daylight_hours(latitude, year=None):
+    """
+    Calculate mean daylight hours for each month of the year for a given
+    latitude.
+
+    :param latitude: Latitude [radians]
+    :param year: Year for the daylight hours are required. The only effect of
+        *year* is to change the number of days in Feb to 29 if it is a leap
+        year. If left as the default, None, then a normal (non-leap) year is
+        assumed.
+    :return: Mean daily daylight hours of each month of a year [hours]
+    :rtype: List of floats.
+    """
+    check_latitude(latitude)
+
+    if year is None or not calendar.isleap(year):
+        month_days = _MONTHDAYS
+    else:
+        month_days = _LEAP_MONTHDAYS
+    monthly_mean_dlh = []
+    doy = 1  # Day of the year
+    for mdays in month_days:
+        dlh = 0.0  # Cumulative daylight hours for the month
+        for daynum in range(1, mdays + 1):
+            sd = get_solar_declination(doy)
+            sha = get_sunset_hour_angle(latitude, sd)
+            dlh += get_daylight_hours(sha)
+            doy += 1
+        # Calc mean daylight hours of the month
+        monthly_mean_dlh.append(dlh / mdays)
+    return monthly_mean_dlh

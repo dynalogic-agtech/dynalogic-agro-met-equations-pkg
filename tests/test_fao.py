@@ -1,31 +1,34 @@
 import unittest
 
-from AgroMetEquations import (sol_dec,
-                              sunset_hour_angle,
-                              daylight_hours,
-                              inv_rel_dist_earth_sun,
-                              et_rad,
-                              dailyto15min,
-                              cs_rad,
-                              svp_from_t,
-                              svp,
-                              avp_from_rhmin_rhmax,
-                              watt2mj15min,
-                              net_out_lw_rad,
-                              celsius2kelvin,
-                              net_in_sol_rad,
-                              net_rad,
-                              soil_heat_flux_by_nightday_period,
-                              latent_heat,
-                              delta_svp,
-                              psy_const,
-                              wind_speed_2m,
-                              fao56_penman_monteith
-                              )
+from AgroMetEquations.auxiliary import (get_solar_declination,
+                                        get_sunset_hour_angle,
+                                        get_daylight_hours,
+                                        get_inverse_relative_distance_earth_sun,
+                                        get_daily_extraterrestrial_radiation,
+                                        daily_to_15min,
+                                        get_clear_sky_radiation,
+                                        get_svp_from_temp,
+                                        get_svp,
+                                        get_avp_from_rhmin_rhmax,
+                                        watt2mj15min,
+                                        get_net_out_lw_rad,
+                                        celsius2kelvin,
+                                        get_net_in_sol_rad,
+                                        get_net_rad,
+                                        get_soil_heat_flux_by_night_or_day_period,
+                                        get_latent_heat,
+                                        get_delta_svp,
+                                        get_psy_const,
+                                        get_wind_speed_2m
+                                        )
+
+from AgroMetEquations.evapotranspiration_equations import (fao56_penman_monteith,
+                                                           priestley_taylor,
+                                                           hargreaves_samani_with_solar_ratiation,
+                                                           hargreaves_samani_without_solar_ratiation)
 
 
 class TestFAO(unittest.TestCase):
-
     solar_declination = None
     sunset_h_angle = None
     inv_relative_distance_earth_sun = None
@@ -103,58 +106,60 @@ class TestFAO(unittest.TestCase):
 
     def test_01_solar_declination(self):
         expected = 0.022889
-        TestFAO.solar_declination = sol_dec(self.doy)
+        TestFAO.solar_declination = get_solar_declination(self.doy)
         self.assertAlmostEqual(TestFAO.solar_declination, expected, delta=0.15)
 
     def test_02_sunset_hour_angle(self):
         expected = 1.562122837
-        TestFAO.sunset_h_angle = sunset_hour_angle(self.station_position['latitude'], TestFAO.solar_declination)
+        TestFAO.sunset_h_angle = get_sunset_hour_angle(self.station_position['latitude'],
+                                                       TestFAO.solar_declination)
         self.assertAlmostEqual(TestFAO.sunset_h_angle, expected, delta=0.15)
 
     def test_03_daylight_hours(self):
         expected = 11.93373942
-        TestFAO.daylight_hrs = daylight_hours(TestFAO.sunset_h_angle)
+        TestFAO.daylight_hrs = get_daylight_hours(TestFAO.sunset_h_angle)
         self.assertAlmostEqual(TestFAO.daylight_hrs, expected, delta=0.15)
 
     def test_04_inv_relative_distance_earth_sun(self):
         expected = 1.004107816
-        TestFAO.inv_relative_distance_earth_sun = inv_rel_dist_earth_sun(self.doy)
+        TestFAO.inv_relative_distance_earth_sun = get_inverse_relative_distance_earth_sun(self.doy)
         self.assertAlmostEqual(TestFAO.inv_relative_distance_earth_sun, expected, delta=0.15)
 
     def test_05_15min_extraterrestrial_radiation(self):
         expected = 0.3626729167
-        daily_extraterrestrial_radiation = et_rad(self.station_position['latitude'],
-                                                  TestFAO.solar_declination, TestFAO.sunset_h_angle,
-                                                  TestFAO.inv_relative_distance_earth_sun)
-        TestFAO.extraterrestrial_radiation_15min = dailyto15min(daily_extraterrestrial_radiation)
+        daily_extraterrestrial_radiation = get_daily_extraterrestrial_radiation(self.station_position['latitude'],
+                                                                                TestFAO.solar_declination,
+                                                                                TestFAO.sunset_h_angle,
+                                                                                TestFAO.inv_relative_distance_earth_sun)
+        TestFAO.extraterrestrial_radiation_15min = daily_to_15min(daily_extraterrestrial_radiation)
         self.assertAlmostEqual(TestFAO.extraterrestrial_radiation_15min, expected, delta=0.15)
 
     def test_06_claer_sky(self):
         expected = 0.2770
-        TestFAO.clear_sky_radiation = cs_rad(self.station_position['altitude'],
-                                             TestFAO.extraterrestrial_radiation_15min)
+        TestFAO.clear_sky_radiation = get_clear_sky_radiation(self.station_position['altitude'],
+                                                              TestFAO.extraterrestrial_radiation_15min)
         self.assertAlmostEqual(TestFAO.clear_sky_radiation, expected, delta=0.15)
 
     def test_07_svp_min(self):
         expected = 5.940997702
-        TestFAO.svp_min = svp_from_t(self.sensor_data['temperature_min'])
+        TestFAO.svp_min = get_svp_from_temp(self.sensor_data['temperature_min'])
         self.assertAlmostEqual(TestFAO.svp_min, expected, delta=0.15)
 
     def test_08_svp_max(self):
         expected = 6.99146929
-        TestFAO.svp_max = svp_from_t(self.sensor_data['temperature_max'])
+        TestFAO.svp_max = get_svp_from_temp(self.sensor_data['temperature_max'])
         self.assertAlmostEqual(TestFAO.svp_max, expected, delta=0.15)
 
     def test_09_svp(self):
         expected = 6.466233496
-        TestFAO.svp = svp(TestFAO.svp_min, TestFAO.svp_max)
+        TestFAO.svp = get_svp(TestFAO.svp_min, TestFAO.svp_max)
         self.assertAlmostEqual(TestFAO.svp, expected, delta=0.15)
 
     def test_10_actual_vapour_pressure(self):
         expected = 5.529446659
-        TestFAO.actual_vapour_pressure = avp_from_rhmin_rhmax(TestFAO.svp_min, TestFAO.svp_max,
-                                                              self.sensor_data['relative_humidity_min'],
-                                                              self.sensor_data['relative_humidity_max'])
+        TestFAO.actual_vapour_pressure = get_avp_from_rhmin_rhmax(TestFAO.svp_min, TestFAO.svp_max,
+                                                                  self.sensor_data['relative_humidity_min'],
+                                                                  self.sensor_data['relative_humidity_max'])
         self.assertAlmostEqual(TestFAO.actual_vapour_pressure, expected, delta=0.15)
 
     def test_11_solar_radiation(self):
@@ -166,47 +171,47 @@ class TestFAO(unittest.TestCase):
         expected = 0.01621945
         kelvin_tmin = celsius2kelvin(self.sensor_data['temperature_min'])
         kelvin_tmax = celsius2kelvin(self.sensor_data['temperature_max'])
-        net_outgoing_longwave_radiation_daily = net_out_lw_rad(kelvin_tmin, kelvin_tmax,
-                                                               TestFAO.solar_radiation_15min,
-                                                               TestFAO.clear_sky_radiation,
-                                                               TestFAO.actual_vapour_pressure)
-        TestFAO.net_outgoing_longwave_radiation_15min = dailyto15min(net_outgoing_longwave_radiation_daily)
+        net_outgoing_longwave_radiation_daily = get_net_out_lw_rad(kelvin_tmin, kelvin_tmax,
+                                                                   TestFAO.solar_radiation_15min,
+                                                                   TestFAO.clear_sky_radiation,
+                                                                   TestFAO.actual_vapour_pressure)
+        TestFAO.net_outgoing_longwave_radiation_15min = daily_to_15min(net_outgoing_longwave_radiation_daily)
         self.assertAlmostEqual(TestFAO.net_outgoing_longwave_radiation_15min, expected, delta=0.15)
 
     def test_13_net_income_solar_radiation(self):
         expected = 0.5544
-        TestFAO.net_income_solar_radiation = net_in_sol_rad(TestFAO.solar_radiation_15min)
+        TestFAO.net_income_solar_radiation = get_net_in_sol_rad(TestFAO.solar_radiation_15min)
         self.assertAlmostEqual(TestFAO.net_income_solar_radiation, expected, delta=0.15)
 
     def test_14_daily_net_radiation(self):
         expected = 0.5382
-        TestFAO.net_radiation = net_rad(TestFAO.net_income_solar_radiation,
-                                        TestFAO.net_outgoing_longwave_radiation_15min)
+        TestFAO.net_radiation = get_net_rad(TestFAO.net_income_solar_radiation,
+                                            TestFAO.net_outgoing_longwave_radiation_15min)
         self.assertAlmostEqual(TestFAO.net_radiation, expected, delta=0.15)
 
     def test_15_soil_heat_flux(self):
         expected = 0.05382055
-        TestFAO.soil_heat_flux = soil_heat_flux_by_nightday_period(TestFAO.net_radiation)
+        TestFAO.soil_heat_flux = get_soil_heat_flux_by_night_or_day_period(TestFAO.net_radiation)
         self.assertAlmostEqual(TestFAO.soil_heat_flux, expected, delta=0.15)
 
     def test_16_latent_heat(self):
         expected = 2.40994
-        TestFAO.latent_heat = latent_heat(self.sensor_data['temperature_mean'])
+        TestFAO.latent_heat = get_latent_heat(self.sensor_data['temperature_mean'])
         self.assertAlmostEqual(TestFAO.latent_heat, expected, delta=0.15)
 
     def test_17_delta(self):
         expected = 0.358203
-        TestFAO.delta = delta_svp(self.sensor_data['temperature_mean'])
+        TestFAO.delta = get_delta_svp(self.sensor_data['temperature_mean'])
         self.assertAlmostEqual(TestFAO.delta, expected, delta=0.15)
 
     def test_18_gamma(self):
         expected = 0.064200
-        TestFAO.gamma = psy_const(self.sensor_data['atmosphere_pressure'], TestFAO.latent_heat)
+        TestFAO.gamma = get_psy_const(self.sensor_data['atmosphere_pressure'], TestFAO.latent_heat)
         self.assertAlmostEqual(TestFAO.gamma, expected, delta=0.015)
 
     def test_19_wind_speed_2m(self):
         expected = 2.34
-        TestFAO.wind_speed = wind_speed_2m(self.sensor_data['wind_speed'], self.station_position['sensor_height'])
+        TestFAO.wind_speed = get_wind_speed_2m(self.sensor_data['wind_speed'], self.station_position['sensor_height'])
         self.assertAlmostEqual(TestFAO.wind_speed, expected, delta=0.15)
 
     def test_20_et0(self):
@@ -222,6 +227,34 @@ class TestFAO(unittest.TestCase):
                                     TestFAO.soil_heat_flux
                                     )
         self.assertAlmostEqual(fao, expected, delta=0.05)
+
+    def test_21_priestley_taylor(self):
+        expected = 0.22
+        et0 = priestley_taylor(TestFAO.latent_heat,
+                               TestFAO.delta,
+                               TestFAO.gamma,
+                               TestFAO.net_radiation,
+                               TestFAO.soil_heat_flux)
+
+        self.assertAlmostEqual(et0, expected, delta=0.05)
+
+    def test_22_hargreaves_samani_with_solar_ratiation(self):
+        expected = 0.22
+        et0 = hargreaves_samani_with_solar_ratiation(TestFAO.latent_heat,
+                                                     self.sensor_data['temperature_mean'],
+                                                     TestFAO.solar_radiation_15min)
+
+        self.assertAlmostEqual(et0, expected, delta=0.05)
+
+    def test_23_hargreaves_samani_without_solar_ratiation_and_wind_speed(self):
+        expected = 0.22
+        et0 = hargreaves_samani_without_solar_ratiation(TestFAO.latent_heat,
+                                                        self.sensor_data['temperature_mean'],
+                                                        self.sensor_data['temperature_max'],
+                                                        self.sensor_data['temperature_min'],
+                                                        TestFAO.extraterrestrial_radiation_15min)
+
+        self.assertAlmostEqual(et0, expected, delta=0.05)
 
 
 if __name__ == '__main__':

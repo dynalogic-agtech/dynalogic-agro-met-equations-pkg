@@ -84,7 +84,7 @@ def priestley_taylor(latent_ht, delta_sat_vp, psy, net_radiation, soil_heat_flux
 # #############################################################################
 #                 Hargreaves & Samani – With Solar Radiation                   #
 # #############################################################################
-def hargreaves_samani_with_solar_ratiation(latent_ht, temperature_mean, solar_radiation):
+def hargreaves_samani_with_solar_radiation(latent_ht, temperature_mean, solar_radiation):
     a1 = (1 / latent_ht) * 0.0135
     a2 = (17.8 + temperature_mean) * solar_radiation
 
@@ -94,7 +94,7 @@ def hargreaves_samani_with_solar_ratiation(latent_ht, temperature_mean, solar_ra
 # #############################################################################
 #                 Hargreaves & Samani – Without Solar Radiation                   #
 # #############################################################################
-def hargreaves_samani_without_solar_ratiation(latent_ht, temperature_mean, temperature_max, temperature_min,
+def hargreaves_samani_without_solar_radiation(latent_ht, temperature_mean, temperature_max, temperature_min,
                                               extraterrestrial_radiation):
     a1 = (1 / latent_ht) * 0.0023
     a2 = temperature_mean + 17.8

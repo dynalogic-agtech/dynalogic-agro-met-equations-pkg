@@ -24,8 +24,8 @@ from AgroMetEquations.auxiliary import (get_solar_declination,
 
 from AgroMetEquations.evapotranspiration_equations import (fao56_penman_monteith,
                                                            priestley_taylor,
-                                                           hargreaves_samani_with_solar_ratiation,
-                                                           hargreaves_samani_without_solar_ratiation)
+                                                           hargreaves_samani_with_solar_radiation,
+                                                           hargreaves_samani_without_solar_radiation)
 
 
 class TestFAO(unittest.TestCase):
@@ -238,17 +238,17 @@ class TestFAO(unittest.TestCase):
 
         self.assertAlmostEqual(et0, expected, delta=0.05)
 
-    def test_22_hargreaves_samani_with_solar_ratiation(self):
+    def test_22_hargreaves_samani_with_solar_radiation(self):
         expected = 0.22
-        et0 = hargreaves_samani_with_solar_ratiation(TestFAO.latent_heat,
+        et0 = hargreaves_samani_with_solar_radiation(TestFAO.latent_heat,
                                                      self.sensor_data['temperature_mean'],
                                                      TestFAO.solar_radiation_15min)
 
         self.assertAlmostEqual(et0, expected, delta=0.05)
 
-    def test_23_hargreaves_samani_without_solar_ratiation_and_wind_speed(self):
-        expected = 0.22
-        et0 = hargreaves_samani_without_solar_ratiation(TestFAO.latent_heat,
+    def test_23_hargreaves_samani_without_solar_radiation_and_wind_speed(self):
+        expected = 0.33
+        et0 = hargreaves_samani_without_solar_radiation(TestFAO.latent_heat,
                                                         self.sensor_data['temperature_mean'],
                                                         self.sensor_data['temperature_max'],
                                                         self.sensor_data['temperature_min'],

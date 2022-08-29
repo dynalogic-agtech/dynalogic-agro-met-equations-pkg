@@ -1,7 +1,3 @@
-from AgroMetEquations import auxiliary
-from AgroMetEquations import evapotranspiration_equations
-from AgroMetEquations import thornthwaite_mather_1955_waterbalance
-
 from AgroMetEquations.auxiliary import (
     # Validations
     check_day_hours,
@@ -62,9 +58,9 @@ from AgroMetEquations.auxiliary import (
 
 )
 
-from thornthwaite_mather_1955_waterbalance import waterbalance
+from AgroMetEquations.thornthwaite_mather_1955_waterbalance import waterbalance
 
-from evapotranspiration_equations import (
+from AgroMetEquations.evapotranspiration_equations import (
     fao56_penman_monteith,
     priestley_taylor,
     hargreaves_samani_with_solar_radiation,

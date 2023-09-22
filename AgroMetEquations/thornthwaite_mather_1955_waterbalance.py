@@ -78,6 +78,10 @@ def get_water_storage_negative_accumulated(last_water_storage: int,
     # p_etc positive after negative sequence
     if p_etc >= 0 >= last_negative_accumulated:
         water_storage = get_water_storage(p_etc, last_negative_accumulated, cad, last_water_storage)
+
+        # fix for log(0) error
+        water_storage = 1 if water_storage == 0 else water_storage
+
         negative_accumulated = round(cad * math.log(water_storage / cad)) if water_storage < cad else 0
 
     return water_storage, negative_accumulated
